@@ -4,10 +4,20 @@ library(parallel)
 
 states <- st_read("./data/UsElectionStates.shp")
 
+## buildBuffers <- function(recordNum, dist){
+##     message(recordNum)
+##     record <- states[recordNum,]
+##     buff <- st_cast(record$geometry, "MULTILINESTRING") %>%
+##         st_buffer(dist = dist) %>%
+##         st_union() %>%
+##         st_intersection(y = record$geometry)
+
 ## define function for filling rasters proportionally
 buildRasters <- function(recordNum, outcellsize = 5000){
-
+    message(recordNum)
     ## make blank raster as defined by bounding box
+    record <- states[recordNum,]
+    rbox <- st_bbox(record$geometry)
     rast <- raster(vals = 0,
                    xmn = rbox["xmin"],
                    xmx = rbox["xmax"],
@@ -16,16 +26,16 @@ buildRasters <- function(recordNum, outcellsize = 5000){
                    resolution = outcellsize)
 
     ## make all cells outside of polygon NA
-    rama <- mask(rast, as(st_difference(record$geometry, buff), "Spatial"))
+    rama <- mask(rast, as(record, "Spatial"))
 
     ## extract cell ids from raster inside polygon
-    raex <- extract(rast, as(st_difference(record$geometry, buff), "Spatial"), cellnumber = T)
+    raex <- extract(rast, as(record, "Spatial"), cellnumber = T)
 
     ## process proportions
-    hc <- record$HC_percent/100
-    dt <- record$DT_percent/100
-    gj <- record$GJ_percent/100
-    js <- record$JS_percent/100
+    hc <- record$HC_prcn/100
+    dt <- record$DT_prcn/100
+    gj <- record$GJ_prcn/100
+    js <- record$JS_prcn/100
     other <- 1 - sum(c(hc, dt, gj, js), na.rm = T)
     modList <- list(hc, dt, gj, js, other)
 
@@ -58,6 +68,6 @@ lapply(mergeVec,
 
 ## export map
 jpeg("./outImg.jpg", width = 1000, height = 600)
-plot(outRast, col = c("lightblue", "salmon", "gold", "lightgreen", "purple"))
+plot(outRast, col = c("dodgerblue", "firebrick2", "gold", "lightgreen", "darkorchid"))
 plot(states, add = T, col = NA)
 dev.off()
