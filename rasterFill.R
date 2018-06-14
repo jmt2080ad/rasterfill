@@ -40,11 +40,13 @@ buildRasters <- function(recordNum, outcellsize = 5000){
     modList <- list(hc, dt, gj, js, other)
 
     ## assign proportions based on total valid cells
-    cellVec <- unlist(mapply(function(x, y){
+    cellVec <- unlist(mapply(function(x, y, rastLen){
         x <- x[!is.na(x)]
         y <- y[!is.na(x)]
-        rep(y, times = ceiling(x * length(rama[!is.na(rama)])))
-    }, modList, seq(modList), SIMPLIFY = F))[1:length(rama[!is.na(rama)])]
+        rep(y, times = ceiling(x * rastLen))
+    },
+    modList, seq(modList),
+    MoreArgs = list(rastLen = nrow(raex[[1]])), SIMPLIFY = F))
 
     ## assign cell values to raster based on cell ID
     invisible(mapply(function(x, y) rama[x] <<- y, raex[[1]][,1], cellVec))
@@ -69,5 +71,5 @@ lapply(mergeVec,
 ## export map
 jpeg("./outImg.jpg", width = 1000, height = 600)
 plot(outRast, col = c("dodgerblue", "firebrick2", "gold", "lightgreen", "darkorchid"))
-plot(states, add = T, col = NA)
+plot(states["geometry"], add = T, col = NA)
 dev.off()
