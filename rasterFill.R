@@ -1,19 +1,18 @@
+## spatial libraries
 library(raster)
 library(sf)
 library(RCurl)
 library(XML)
 library(rlist)
 library(parallel)
-library(data.table)
 
-#### get data
-## states
+## get states
 shpDir <- tempdir()
 download.file("http://www2.census.gov/geo/tiger/GENZ2017/shp/cb_2017_us_state_20m.zip", file.path(shpDir, "US.zip"))
 unzip(file.path(shpDir, "US.zip"), exdir = shpDir)
 states <- read_sf(file.path(shpDir, "cb_2017_us_state_20m.shp"))
 
-## attributes, takes forever on my machine...
+## get attributes
 attr <- readHTMLTable(getURI("https://en.wikipedia.org/wiki/United_States_presidential_election,_2016"))
 attr <- list.clean(attr, fun = is.null, recursive = FALSE)
 attrMain  <- attr[[31]][,1:14]
@@ -28,16 +27,16 @@ attrMain  <- cbind(attrMain[1:2],
 attrMain  <- attrMain[!grepl(", 1st|, 2nd|, 3rd", attrMain$state_or_district),]
 attrMain$state_or_district <- gsub(" \\(at-lg\\)", "", attrMain$state_or_district) 
 
-## merge meta data with shapes
+## merge attributes with shapes
 states <- merge(states, attrMain, by.x="NAME", by.y="state_or_district")
 
 ## get only lower 48
 states <- states[!states$NAME %in% c("Puerto Rico", "Alaska", "Hawaii"),]
 
-## transfrom to utm 
+## transfrom to US friendly projection 
 states <- st_transform(states, crs = 2163)
 
-## now on to the symbology
+## define function for filling rasters proportionally
 buildRasters <- function(recordNum, outcellsize = 5000){
     record <- states[recordNum,]
     print(recordNum)
@@ -45,6 +44,7 @@ buildRasters <- function(recordNum, outcellsize = 5000){
     stat <- st_difference(record$geometry, buff)
     rbox <- st_bbox(record$geometry)
 
+    ## make blank raster as defined by bounding box
     rast <- raster(vals = 0,
                    xmn = rbox["xmin"],
                    xmx = rbox["xmax"],
@@ -52,13 +52,13 @@ buildRasters <- function(recordNum, outcellsize = 5000){
                    ymx = rbox["ymax"],
                    resolution = outcellsize)
 
-    rama <- mask(rast,
-                 as(st_difference(record$geometry, buff), "Spatial"))
+    ## make all cells outside of polygon NA
+    rama <- mask(rast, as(st_difference(record$geometry, buff), "Spatial"))
 
-    raex <- extract(rast,
-                    as(st_difference(record$geometry, buff), "Spatial"),
-                    cellnumber = T)
+    ## extract cell ids from raster inside polygon
+    raex <- extract(rast, as(st_difference(record$geometry, buff), "Spatial"), cellnumber = T)
 
+    ## process proportions
     hc <- record$HC_percent/100
     dt <- record$DT_percent/100
     gj <- record$GJ_percent/100
@@ -66,28 +66,34 @@ buildRasters <- function(recordNum, outcellsize = 5000){
     other <- 1 - sum(c(hc, dt, gj, js), na.rm = T)
     modList <- list(hc, dt, gj, js, other)
 
-    cellVec <- unlist(mapply(function(x, y){x <- x[!is.na(x)]; y <- y[!is.na(x)]; rep(y, times = ceiling(x * length(rama[!is.na(rama)])))},
-                             modList, seq(modList), SIMPLIFY = F))[1:length(rama[!is.na(rama)])]
-   
+    ## assign proportions based on total valid cells
+    cellVec <- unlist(mapply(function(x, y){
+        x <- x[!is.na(x)]
+        y <- y[!is.na(x)]
+        rep(y, times = ceiling(x * length(rama[!is.na(rama)])))
+    }, modList, seq(modList), SIMPLIFY = F))[1:length(rama[!is.na(rama)])]
+
+    ## assign cell values to raster based on cell ID
     invisible(mapply(function(x, y) rama[x] <<- y, raex[[1]][,1], cellVec))
     return(rama)
 }
 
+## run build raster in parallel 
 cl <- makeCluster(detectCores())
 clusterExport(cl, list("states"))
 clusterEvalQ(cl, {library(raster); library(sf); library(sp)})
 stateRast <- parLapply(cl, seq(nrow(states)), buildRasters)
 stopCluster(cl)
 
+## merge each state into one raster
 mergeVec <- 2:length(stateRast)
-
 outRast <- extend(stateRast[[1]], extent(states))
-
 lapply(mergeVec,
        function(x){
            outRast <<- merge(outRast, resample(stateRast[[x]], outRast))
        })
 
+## export map
 jpeg("./outImg.jpg", width = 1000, height = 600)
 plot(outRast, col = c("lightblue", "salmon", "gold", "lightgreen", "purple"))
 plot(states, add = T, col = NA)
