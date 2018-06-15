@@ -4,13 +4,14 @@ library(parallel)
 
 states <- st_read("./data/UsElectionStates.shp")
 
-## buildBuffers <- function(recordNum, dist){
-##     message(recordNum)
-##     record <- states[recordNum,]
-##     buff <- st_cast(record$geometry, "MULTILINESTRING") %>%
-##         st_buffer(dist = dist) %>%
-##         st_union() %>%
-##         st_intersection(y = record$geometry)
+## define function for building buffers based on turn out
+buildBuffers <- function(recordNum, dist){
+    message(recordNum)
+    record <- states[recordNum,]
+    buff <- st_cast(record$geometry, "MULTILINESTRING") %>%
+        st_buffer(dist = dist) %>%
+        st_union() %>%
+        st_intersection(y = record$geometry)
 
 ## define function for filling rasters proportionally
 buildRasters <- function(recordNum, outcellsize = 5000){
@@ -29,7 +30,7 @@ buildRasters <- function(recordNum, outcellsize = 5000){
     rama <- mask(rast, as(record, "Spatial"))
 
     ## extract cell ids from raster inside polygon
-    raex <- extract(rast, as(record, "Spatial"), cellnumber = T)
+    raex <- extract(rast, as(record, "Spatial"), cellnumber = T)[[1]]
 
     ## process proportions
     hc <- record$HC_prcn/100
@@ -43,13 +44,17 @@ buildRasters <- function(recordNum, outcellsize = 5000){
     cellVec <- unlist(mapply(function(x, y, rastLen){
         x <- x[!is.na(x)]
         y <- y[!is.na(x)]
-        rep(y, times = ceiling(x * rastLen))
+        rep(y, times = round(x * rastLen))
     },
     modList, seq(modList),
-    MoreArgs = list(rastLen = nrow(raex[[1]])), SIMPLIFY = F))
+    MoreArgs = list(rastLen = nrow(raex)), SIMPLIFY = F))
 
-    ## assign cell values to raster based on cell ID
-    invisible(mapply(function(x, y) rama[x] <<- y, raex[[1]][,1], cellVec))
+    ## replace extract table with values
+    raex[,2] <- cellVec[1:nrow(raex)]
+
+    ## replace cells
+    rama[raex[,1]] <- raex[,2]
+    
     return(rama)
 }
 

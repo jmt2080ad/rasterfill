@@ -1,6 +1,7 @@
 library(RCurl)
 library(XML)
 library(rlist)
+library(googlesheets)
 library(parallel)
 
 ## get states
@@ -9,7 +10,7 @@ download.file("http://www2.census.gov/geo/tiger/GENZ2017/shp/cb_2017_us_state_20
 unzip(file.path(shpDir, "US.zip"), exdir = shpDir)
 states <- read_sf(file.path(shpDir, "cb_2017_us_state_20m.shp"))
 
-## get attributes
+## get results attributes
 attr <- readHTMLTable(getURI("https://en.wikipedia.org/wiki/United_States_presidential_election,_2016"))
 attr <- list.clean(attr, fun = is.null, recursive = FALSE)
 attrMain  <- attr[[31]][,1:14]
@@ -23,6 +24,10 @@ attrMain  <- cbind(attrMain[1:2],
                                      function(x) as.numeric(gsub(",|%", "", x)))))
 attrMain  <- attrMain[!grepl(", 1st|, 2nd|, 3rd", attrMain$state_or_district),]
 attrMain$state_or_district <- gsub(" \\(at-lg\\)", "", attrMain$state_or_district) 
+
+## get turnout attributes
+turn <- gs_download(,
+                    "./data/turnout.csv")
 
 ## merge attributes with shapes
 states <- merge(states, attrMain, by.x="NAME", by.y="state_or_district")
