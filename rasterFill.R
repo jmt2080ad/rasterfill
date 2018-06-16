@@ -94,7 +94,7 @@ lapply(mergeVec,
        })
 
 ## export map
-jpeg("./outImg.jpg", width = 1000, height = 600)
+jpeg("./outImg.jpg", width = 1800, height = 1200)
 cols <- c("dodgerblue", "firebrick2", "gold", "green", "darkorchid")
 plot(outRast, col = cols, legend = F, axes = F)
 plot(states["geometry"], add = T, col = NA, lwd = 0.5)
