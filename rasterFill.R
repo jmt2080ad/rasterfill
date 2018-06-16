@@ -1,23 +1,43 @@
 library(raster)
 library(sf)
 library(parallel)
+library(data.table)
 
 states <- st_read("./data/UsElectionStates.shp")
 
 ## define function for building buffers based on turn out
-buildBuffers <- function(recordNum, dist){
-    message(recordNum)
-    record <- states[recordNum,]
-    buff <- st_cast(record$geometry, "MULTILINESTRING") %>%
-        st_buffer(dist = dist) %>%
+## root finding equation: (1 - buffArea/stateArea) - turnout_ppo
+rootFun <- function(x, record, stateArea, turnout_ppo){
+    buffArea <- st_cast(record$geometry, "MULTILINESTRING") %>%
         st_union() %>%
-        st_intersection(y = record$geometry)
+        st_buffer(dist = x) %>%
+        st_intersection(y = record$geometry) %>%
+        st_area() %>%
+        as.numeric()
+    (1 - buffArea/stateArea) - turnout_ppo
+}
+
+buildBuff <- function(record){
+    stateArea   <- as.numeric(st_area(record$geometry))
+    turnout_ppo <- record$turn_pp
+    buffDist    <- uniroot(rootFun,
+                           record = record,
+                           stateArea = stateArea,
+                           turnout_ppo = turnout_ppo,
+                           lower = 1,
+                           upper = stateArea)
+    return(buffArea <- st_cast(record$geometry, "MULTILINESTRING") %>%
+               st_union() %>%
+               st_buffer(dist = buffDist$root))
+}
 
 ## define function for filling rasters proportionally
-buildRasters <- function(recordNum, outcellsize = 5000){
+buildRasters <- function(recordNum, outcellsize = 2000){
     message(recordNum)
     ## make blank raster as defined by bounding box
     record <- states[recordNum,]
+    buff <- buildBuff(record)
+    stat <- st_difference(record$geometry, buff)
     rbox <- st_bbox(record$geometry)
     rast <- raster(vals = 0,
                    xmn = rbox["xmin"],
@@ -27,10 +47,10 @@ buildRasters <- function(recordNum, outcellsize = 5000){
                    resolution = outcellsize)
 
     ## make all cells outside of polygon NA
-    rama <- mask(rast, as(record, "Spatial"))
+    rama <- mask(rast, as(stat, "Spatial"))
 
     ## extract cell ids from raster inside polygon
-    raex <- extract(rast, as(record, "Spatial"), cellnumber = T)[[1]]
+    raex <- extract(rast, as(stat, "Spatial"), cellnumber = T)[[1]]
 
     ## process proportions
     hc <- record$HC_prcn/100
@@ -60,7 +80,7 @@ buildRasters <- function(recordNum, outcellsize = 5000){
 
 ## run build raster in parallel 
 cl <- makeCluster(detectCores())
-clusterExport(cl, list("states"))
+clusterExport(cl, list("states", "buildBuff", "rootFun"))
 clusterEvalQ(cl, {library(raster); library(sf); library(sp)})
 stateRast <- parLapply(cl, seq(nrow(states)), buildRasters)
 stopCluster(cl)
@@ -75,6 +95,8 @@ lapply(mergeVec,
 
 ## export map
 jpeg("./outImg.jpg", width = 1000, height = 600)
-plot(outRast, col = c("dodgerblue", "firebrick2", "gold", "lightgreen", "darkorchid"))
-plot(states["geometry"], add = T, col = NA)
+cols <- c("dodgerblue", "firebrick2", "gold", "green", "darkorchid")
+plot(outRast, col = cols, legend = F, axes = F)
+plot(states["geometry"], add = T, col = NA, lwd = 0.5)
+legend(x="bottomleft", legend = c("Dems", "GOP", "Libs", "Greens", "Others"), fill= cols)
 dev.off()

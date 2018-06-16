@@ -1,8 +1,7 @@
 library(RCurl)
 library(XML)
 library(rlist)
-library(googlesheets)
-library(parallel)
+library(data.table)
 
 ## get states
 shpDir <- tempdir()
@@ -26,10 +25,13 @@ attrMain  <- attrMain[!grepl(", 1st|, 2nd|, 3rd", attrMain$state_or_district),]
 attrMain$state_or_district <- gsub(" \\(at-lg\\)", "", attrMain$state_or_district) 
 
 ## get turnout attributes
-turn <- gs_download(,
-                    "./data/turnout.csv")
+turn <- fread("./data/turnout_raw.csv")
+turn[,vep_highest_office:=as.numeric(gsub("%","",vep_highest_office))/100]
+setnames(turn, "vep_highest_office", "turn_ppo")
+turn <- turn[,.(state, turn_ppo)]
 
 ## merge attributes with shapes
+attrMain <- merge(attrMain, turn, by.x = "state_or_district", by.y = "state")
 states <- merge(states, attrMain, by.x="NAME", by.y="state_or_district")
 
 ## get only lower 48
@@ -39,4 +41,4 @@ states <- states[!states$NAME %in% c("Puerto Rico", "Alaska", "Hawaii"),]
 states <- st_transform(states, crs = 2163)
 
 ## write out data
-st_write(states, "./data/UsElectionStates.shp")
+st_write(states, "./data/UsElectionStates.shp", delete_layer = T)

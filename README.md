@@ -1,8 +1,10 @@
 This is an R approach for the symbology found in here -> [https://doi.org/10.6084/m9.figshare.4033671.v1](https://doi.org/10.6084/m9.figshare.4033671.v1)
 
-This uses the 2016 US elections wiki site and census state boundary pulled on the fly, so the script will break if the urls change.
+This uses the 2016 US elections wiki site, census state boundaries, and turnout data. 
 
-Plotting is minimal, this is just a proof of concept.
+See `xGetBaseData.R` for data processing steps.
+
+See `rasterFill.R` for the visualization and export.
 
 Enjoy!
 
