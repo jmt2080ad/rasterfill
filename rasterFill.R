@@ -94,9 +94,11 @@ lapply(mergeVec,
        })
 
 ## export map
-jpeg("./outImg.jpg", width = 1800, height = 1200)
+jpeg("./outImg.jpg", width=900, height=600, quality=100)
 cols <- c("dodgerblue", "firebrick2", "gold", "green", "darkorchid")
 plot(outRast, col = cols, legend = F, axes = F)
 plot(states["geometry"], add = T, col = NA, lwd = 0.5)
 legend(x="bottomleft", legend = c("Dems", "GOP", "Libs", "Greens", "Others"), fill= cols)
 dev.off()
+
+writeRaster(outRast, "outRast.tif", overwrite = T)
