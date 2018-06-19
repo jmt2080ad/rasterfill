@@ -32,22 +32,19 @@ buildBuff <- function(record){
 }
 
 ## define function for filling rasters proportionally
-buildRasters <- function(recordNum, outcellsize = 2000){
+buildRasters <- function(recordNum, outcellsize = 1000){
     message(recordNum)
     ## make blank raster as defined by bounding box
     record <- states[recordNum,]
     buff <- buildBuff(record)
     stat <- st_difference(record$geometry, buff)
     rbox <- st_bbox(record$geometry)
-    rast <- raster(vals = 0,
+    rast <- raster(vals = NA,
                    xmn = rbox["xmin"],
                    xmx = rbox["xmax"],
                    ymn = rbox["ymin"],
                    ymx = rbox["ymax"],
                    resolution = outcellsize)
-
-    ## make all cells outside of polygon NA
-    rama <- mask(rast, as(stat, "Spatial"))
 
     ## extract cell ids from raster inside polygon
     raex <- extract(rast, as(stat, "Spatial"), cellnumber = T)[[1]]
@@ -73,9 +70,9 @@ buildRasters <- function(recordNum, outcellsize = 2000){
     raex[,2] <- cellVec[1:nrow(raex)]
 
     ## replace cells
-    rama[raex[,1]] <- raex[,2]
+    rast[raex[,1]] <- raex[,2]
     
-    return(rama)
+    return(rast)
 }
 
 ## run build raster in parallel 
@@ -91,7 +88,9 @@ outRast <- extend(stateRast[[1]], extent(states))
 lapply(mergeVec,
        function(x){
            outRast <<- merge(outRast, resample(stateRast[[x]], outRast))
+           gc()
        })
+
 
 ## export map
 jpeg("./outImg.jpg", width=900, height=600, quality=100)
